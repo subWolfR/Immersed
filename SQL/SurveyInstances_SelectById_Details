@@ -1,0 +1,165 @@
+USE [Immersed]
+GO
+/****** Object:  StoredProcedure [dbo].[SurveyInstances_SelectById_Details]    Script Date: 4/18/2023 10:18:18 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+--=============================================
+-- Author:		<Sabrina Salgado>
+-- Create date: <03/17/2023>
+-- Description:	<Select record and details by Id for SurveyInstances>
+-- Code Reviewer: David Phan
+
+-- MODIFIED BY: author
+-- MODIFIED DATE: mm/dd/yyyy
+-- Code Reviewer:
+-- Note:
+ --=============================================
+
+ALTER proc [dbo].[SurveyInstances_SelectById_Details]
+					@Id int
+/*
+----------TEST CODE--------------
+	DECLARE @Id int = 52
+
+	EXECUTE[dbo].[SurveyInstances_SelectById_Details] @Id
+
+	select *
+	FROM dbo.SurveysInstances
+
+	select *
+	FROM dbo.Surveys
+
+	select *
+	FROM dbo.Users
+
+	select *
+	FROM dbo.SurveyAnswers
+
+	select *
+	FROM dbo.SurveyQuestions
+
+	select *
+	FROM dbo.SurveyQuestionAnswerOptions
+*/
+
+AS
+
+BEGIN
+
+	SELECT
+		si.Id
+		,si.DateCreated
+		,si.DateModified
+		,u.[Id]
+		,u.[Email]
+		,u.[FirstName]
+		,u.[LastName]
+		,u.[Mi]
+		,u.[AvatarUrl]
+		,Survey = 
+			(
+			SELECT s.[Id]
+				,s.[Name]
+				,s.[Description]
+				,s.StatusId 'SurveyStatus.Id'
+				,ss.[Name] 'SurveyStatus.Name'
+				,s.SurveyTypeId 'SurveyType.Id'
+				,surt.[Name] 'SurveyType.Name'
+				,s.CreatedBy 'CreatedBy.Id'
+				,us.[Email] 'CreatedBy.Email'
+				,us.[FirstName] 'CreatedBy.FirstName'
+				,us.[LastName] 'CreatedBy.LastName'
+				,us.[Mi] 'CreatedBy.MI'
+				,us.[AvatarUrl] 'CreatedBy.AvatarUrl'
+				,s.ModifiedBy
+				,s.DateCreated
+				,s.DateModified
+				, Questions = 
+					(
+					SELECT  
+						sq.[Id]
+						,sq.[CreatedBy]
+						,sq.[ModifiedBy]
+						,sq.[Question]
+						,sq.[HelpText]
+						,sq.[IsRequired]
+						,sq.[IsMultipleAllowed]
+						,sq.[QuestionTypeId] 'QuestionType.Id'
+						,qt.[Name] 'QuestionType.Name'
+						,sq.SurveyId
+						,sq.[StatusId] 'Status.Id'
+						,st.[Name] 'Status.Name'
+						,sq.[SortOrder]
+						,sq.[DateCreated]
+						,sq.[DateModified]
+						,[QuestionAnswerOptions] = 
+							(
+							SELECT  
+								sqao.[Id]
+								,sqao.[QuestionId]
+								,sqao.[Text]
+								,sqao.[Value]
+								,sqao.[AdditionalInfo]
+							FROM dbo.SurveyQuestionAnswerOptions as sqao
+							WHERE sq.Id = sqao.QuestionId
+
+							FOR JSON PATH
+							)
+						,Answer = 
+							(
+							SELECT
+								sa.[Id]
+								,sa.[QuestionId]
+								,sa.[Answer]
+								,AnswerOption = 
+									(
+									SELECT  
+										sqao.[Id]
+										,sqao.[QuestionId]
+										,sqao.[Text]
+										,sqao.[Value]
+										,sqao.[AdditionalInfo]
+									FROM dbo.SurveyQuestionAnswerOptions as sqao
+									WHERE sqao.Id = sa.AnswerOptionId
+
+									FOR JSON PATH
+									)
+								,sa.AnswerNumber
+							FROM dbo.SurveyAnswers as sa
+							WHERE sa.InstanceId = @Id AND sa.QuestionId = sq.Id
+
+							FOR JSON PATH
+							)
+
+					FROM dbo.SurveyQuestions as sq
+					inner join dbo.QuestionTypes as qt
+					on qt.Id = sq.QuestionTypeId
+					inner join dbo.StatusTypes as st
+					on sq.StatusId = st.Id
+					WHERE sq.SurveyId = si.SurveyId
+
+					FOR JSON PATH
+					)
+
+			FROM dbo.Surveys as s
+			inner join dbo.SurveyStatus as ss
+				on ss.Id = s.StatusId
+			inner join dbo.SurveyTypes as surt
+				on surt.Id = s.SurveyTypeId
+			inner join dbo.Users as us
+				on us.Id = s.CreatedBy
+			WHERE s.Id = si.SurveyId
+
+			FOR JSON PATH, WITHOUT_ARRAY_WRAPPER 
+			)			
+		
+	FROM dbo.SurveysInstances as si 
+	inner join dbo.Users as u
+	on u.Id = si.UserId
+
+	WHERE @Id = si.Id
+	
+
+END
