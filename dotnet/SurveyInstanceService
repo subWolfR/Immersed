@@ -1,0 +1,126 @@
+using Immersed.Data.Providers;
+using System;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Data;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Immersed.Data;
+using Immersed.Services.Interfaces;
+using Immersed.Models;
+using Immersed.Models.Requests.SurveyInstanceRequests;
+using Immersed.Models.Domain;
+using Immersed.Models.Domain.Users;
+using Immersed.Models.Domain.Comments;
+using Immersed.Models.Domain.Surveys.Answers;
+using Immersed.Models.Domain.Surveys.Instances;
+using Immersed.Models.Domain.Surveys.Details;
+
+namespace Immersed.Services
+{
+    public class SurveyInstanceService : ISurveyInstanceService
+    {
+        IDataProvider _data = null;
+        IMapUser _mapUser = null;
+
+        public SurveyInstanceService(IDataProvider data, IMapUser mapUser)
+        {
+            _data = data;
+            _mapUser = mapUser;
+        }
+
+        public SurveyInstanceDetails GetDetailsById(int id)
+        {
+            string procName = "[dbo].[SurveyInstances_SelectById_Details]";
+
+            SurveyInstanceDetails details = null;
+
+            _data.ExecuteCmd(procName, delegate (SqlParameterCollection paramCollection)
+            {
+                paramCollection.AddWithValue("@Id", id);
+            }, delegate (IDataReader reader, short set)
+            {
+                int startingIndex = 0;
+                details = MapSingleSurveyInstanceDetails(reader, ref startingIndex);
+            });
+
+            return details;
+        }
+
+        public int Add(SurveysInstanceAddRequest model, int userId)
+        {
+            int id = 0;
+
+            string procName = "[dbo].[SurveyInstance_Insert]";
+
+            _data.ExecuteNonQuery(procName, inputParamMapper: delegate (SqlParameterCollection col)
+            {
+
+                AddCommonParams(model, col);
+
+                SqlParameter idOut = new SqlParameter("@Id", SqlDbType.Int);
+
+                idOut.Direction = ParameterDirection.Output;
+
+                col.Add(idOut);
+
+                col.AddWithValue("@UserId", userId);
+
+            }, returnParameters: delegate (SqlParameterCollection returnCollection)
+            {
+
+                object oId = returnCollection["@Id"].Value;
+
+                int.TryParse(oId.ToString(), out id);
+
+            });
+
+            return id;
+        }
+
+        public void Update(SurveyInstanceUpdateRequest model, int userId)
+        {
+            string procName = "[dbo].[SurveyInstance_Update]";
+
+            _data.ExecuteNonQuery(procName, inputParamMapper: delegate (SqlParameterCollection col)
+            {
+                AddCommonParams(model, col);
+
+                col.AddWithValue("@Id", model.Id);
+                col.AddWithValue("@UserId", userId);
+            },
+            returnParameters: null);
+        }
+
+        public void Delete(int id)
+        {
+            string procName = "[dbo].[SurveyInstance_Delete_ById]";
+
+            _data.ExecuteNonQuery(procName, inputParamMapper: delegate (SqlParameterCollection collection)
+            {
+                collection.AddWithValue("@Id", id);
+            },
+            returnParameters: null);
+        }
+
+        private SurveyInstanceDetails MapSingleSurveyInstanceDetails(IDataReader reader, ref int startingIndex)
+        {
+            SurveyInstanceDetails detailedInstance = new SurveyInstanceDetails();
+            detailedInstance.Survey = new SurveyInstanceDetailsAnswer();
+
+            detailedInstance.Id = reader.GetSafeInt32(startingIndex++);
+            detailedInstance.DateCreated = reader.GetSafeDateTime(startingIndex++);
+            detailedInstance.DateModified = reader.GetSafeDateTime(startingIndex++);
+            detailedInstance.CreatedBy = _mapUser.MapSingleUser(reader, ref startingIndex);
+            detailedInstance.Survey = reader.DeserializeObject<SurveyInstanceDetailsAnswer>(startingIndex++);
+
+            return detailedInstance;
+        }
+
+        private static void AddCommonParams(SurveyInstanceAddRequest model, SqlParameterCollection col)
+        {
+            col.AddWithValue("@SurveyId", model.SurveyId);
+        }
+    }
+}
